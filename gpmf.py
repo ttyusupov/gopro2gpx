@@ -29,59 +29,45 @@ class Parser:
 
         # map some handy shortcuts
         self.verbose = config.verbose
-        self.file = config.file
-        self.outputfile = config.outputfile
 
     
-    def readFromMP4(self):
-        """read data the metadata track from video. Requires FFMPEG wrapper.
-           -vv creates a dump file with the  binary data called dump_track.bin
+    def readFrom(self, input_file, is_video):
+        """
+        Read the metadata track from video/metadata file. Requires FFMPEG wrapper when is_video
+        is True.
+        -vv creates a dump file with the binary metadata called <input_file>.meta.bin
         """
         
-        if not os.path.exists(self.file):
-            raise FileNotFoundError("Can't open %s" % self.file)
+        if not os.path.exists(input_file):
+            raise FileNotFoundError("Can't open %s" % input_file)
 
-        track_number, lineinfo = self.ffmtools.getMetadataTrack(self.file)
-        if not track_number:
-            raise Exception("File %s doesn't have any metadata" % self.file)
-        
-        if self.verbose:
-            print("Working on file %s track %s (%s)" % (self.file, track_number, lineinfo))
-        metadata_raw = self.ffmtools.getMetadata(track_number, self.file)
+        if is_video:
+            track_number, lineinfo = self.ffmtools.getMetadataTrack(input_file)
+            if not track_number:
+                raise Exception("File %s doesn't have any metadata" % input_file)
+
+            if self.verbose:
+                print("Working on file %s track %s (%s)" % (input_file, track_number, lineinfo))
+
+            metadata_raw = self.ffmtools.getMetadata(track_number, input_file)
+        else:
+            if self.verbose:
+                print("Reading metadata binary file %s" % input_file)
+
+            fd = open(input_file, 'rb')
+            metadata_raw = fd.read()
+            fd.close()
 
         if self.verbose == 2:
-            print("Creating output file for binary data (fromMP4): %s" % self.outputfile)
-            f = open("%s.bin" % self.outputfile, "wb")
+            dump_file = "%s.meta.bin" % input_file
+            print("Creating output file for binary metadata: %s" % dump_file)
+            f = open(dump_file, "wb")
             f.write(metadata_raw)
             f.close() 
         
         # process the data here
         metadata = self.parseStream(metadata_raw)
         return(metadata)
-
-    def readFromBinary(self):
-        """read data from binary file, instead extract the metadata track from video. Useful for quick development
-           -vv creates a dump file with the  binary data called dump_binary.bin
-        """
-        if not os.path.exists(self.file):
-            raise FileNotFoundError("Can't open %s" % self.file)
-
-        if self.verbose:
-            print("Reading binary file %s" % (self.file))
-        
-        fd = open(self.file, 'rb')
-        data = fd.read()
-        fd.close()
-
-        if self.verbose == 2:
-            print("Creating output file for binary data (from binary): %s" % self.outputfile)
-            f = open("%s.bin" % self.outputfile, "wb")
-            f.write(data)
-            f.close() 
-
-        # process the data here
-        metadata = self.parseStream(data)   
-        return metadata
 
     def parseStream(self, data_raw):
         """

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # 17/02/2019 
 # Juan M. Casillas <juanm.casillas@gmail.com>
@@ -129,6 +129,7 @@ def parseArgs():
     parser.add_argument("-b", "--binary", help="read data from bin file", action="store_true")
     parser.add_argument("-s", "--skip", help="Skip bad points (GPSFIX=0)", action="store_true", default=False)
     parser.add_argument("file", help="Video file or binary metadata dump")
+    # parser.add_argument("file", nargs="+", help="Video file or binary metadata dump")
     parser.add_argument("outputfile", help="output file. builds KML and GPX")
     args = parser.parse_args()
 
@@ -140,10 +141,7 @@ if __name__ == "__main__":
     config = config.setup_environment(args)
     parser = gpmf.Parser(config)
 
-    if not args.binary:
-        data = parser.readFromMP4()
-    else:
-        data = parser.readFromBinary()
+    data = parser.readFrom(config.file, not args.binary)
 
     # build some funky tracks from camera GPS
 
@@ -159,7 +157,7 @@ if __name__ == "__main__":
     fd.write(kml)
     fd.close()
 
-    gpx = gpshelper.generate_GPX(points, trk_name="gopro7-track")
+    gpx = gpshelper.generate_GPX(points, trk_name="gopro-track-%s" % config.outputfile)
     fd = open("%s.gpx" % args.outputfile , "w+")
     fd.write(gpx)
     fd.close()

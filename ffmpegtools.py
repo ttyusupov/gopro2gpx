@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 #
 # 17/02/2019 
 # Juan M. Casillas <juanm.casillas@gmail.com>
