@@ -7,8 +7,11 @@
 # Released under GNU GENERAL PUBLIC LICENSE v3. (Use at your own risk)
 #
 
+import dateutil.parser
 import subprocess
 import re
+
+from datetime import datetime
 
 class FFMpegTools:
 
@@ -54,3 +57,32 @@ class FFMpegTools:
         args = [ '-y', '-i', fname, '-codec', 'copy', '-map', '0:%d' % track, '-f', 'rawvideo', output_file ] 
         output = self.runCmdRaw(self.config.ffmpeg_cmd, args)
         return(output)
+
+    def get_video_time_range(self, fname):
+        output = self.runCmd(self.config.ffprobe_cmd, [fname])
+        # creation_time   : 2020-02-15T16:08:31.000000Z
+        # Duration: 00:01:02.55, start: 0.000000, bitrate: 60131 kb/s
+        regexp = re.compile('creation_time\s*:\s*([^\s]+)', flags=re.I|re.M)
+        m = regexp.search(output)
+        if not m:
+            print("Can't detect file %s creation_time" % fname)
+            return None
+        start_str = m.group(1)
+
+        regexp = re.compile('Duration\s*:\s*([^\s,]+)', flags=re.I|re.M)
+        m = regexp.search(output)
+        if not m:
+            print("Can't detect file %s duration" % fname)
+            return None
+        duration_str = m.group(1)
+
+        if (self.config.verbose):
+            print(start_str, duration_str)
+        start = dateutil.parser.parse(start_str)
+        duration_base = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        duration = dateutil.parser.parse(duration_str, default = duration_base) - duration_base
+        end = start + duration
+
+        if (self.config.verbose):
+            print(start, duration, end)
+        return (start, end)

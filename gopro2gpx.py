@@ -18,7 +18,8 @@ from collections import namedtuple
 import array
 import sys
 import time
-from datetime import datetime
+
+from datetime import datetime, timedelta
 
 import config
 import gpmf
@@ -76,7 +77,9 @@ def BuildGPSPoints(data, skip=False):
 
             data = [ float(x) / float(y) for x,y in zip( d.data._asdict().values() ,list(SCAL) ) ]
             gpsdata = fourCC.GPSData._make(data)
-            p = gpshelper.GPSPoint(gpsdata.lat, gpsdata.lon, gpsdata.alt, datetime.fromtimestamp(time.mktime(GPSU)), gpsdata.speed)
+            p = gpshelper.GPSPoint(gpsdata.lat, gpsdata.lon, gpsdata.alt,
+                                   datetime.fromtimestamp(time.mktime(GPSU)),
+                                   gpsdata.speed)
             points.append(p)
             stats['ok'] += 1
 
@@ -128,8 +131,7 @@ def parseArgs():
     parser.add_argument("-v", "--verbose", help="increase output verbosity", action="count")
     parser.add_argument("-b", "--binary", help="read data from bin file", action="store_true")
     parser.add_argument("-s", "--skip", help="Skip bad points (GPSFIX=0)", action="store_true", default=False)
-    parser.add_argument("file", help="Video file or binary metadata dump")
-    # parser.add_argument("file", nargs="+", help="Video file or binary metadata dump")
+    parser.add_argument("file", nargs="+", help="Video file(s) or binary metadata dump(s)")
     parser.add_argument("outputfile", help="output file. builds KML and GPX")
     args = parser.parse_args()
 
@@ -141,25 +143,53 @@ if __name__ == "__main__":
     config = config.setup_environment(args)
     parser = gpmf.Parser(config)
 
-    data = parser.readFrom(config.file, not args.binary)
+    total_duration = timedelta(0)
+    output_append_timestamp = None
+    total_points = []
+    for file in args.file:
+        data = parser.readFrom(file, not args.binary)
 
-    # build some funky tracks from camera GPS
+        # build some funky tracks from camera GPS
+        print(args.skip)
+        points = BuildGPSPoints(data, skip=args.skip)
 
-    print(args.skip)
-    points = BuildGPSPoints(data, skip=args.skip)
+        if len(points) == 0:
+            print("No GPS info in %s." % file)
+            continue
 
-    if len(points) == 0:
-        print("Can't create file. No GPS info in %s. Exitting" % args.file)
+        if args.binary:
+            file_start_timestamp = points[0].time
+            file_end_timestamp = points[len(points) - 1].time
+        else:
+            (file_start_timestamp, file_end_timestamp) = parser.ffmtools.get_video_time_range(file)
+
+        if not output_append_timestamp:
+            output_append_timestamp = file_start_timestamp
+
+        # Shift time of current file to start at output_append_timestamp.
+        for point in points:
+            point.time -= (file_start_timestamp - output_append_timestamp)
+
+        total_points += points
+
+        file_duration = file_end_timestamp - file_start_timestamp
+        output_append_timestamp += file_duration
+        total_duration += file_duration
+
+    if len(total_points) == 0:
+        print("Can't create file. No GPS info in input files. Exitting")
         sys.exit(0)
 
-    kml = gpshelper.generate_KML(points)
+    kml = gpshelper.generate_KML(total_points)
     fd = open("%s.kml" % args.outputfile , "w+")
     fd.write(kml)
     fd.close()
 
-    gpx = gpshelper.generate_GPX(points, trk_name="gopro-track-%s" % config.outputfile)
+    gpx = gpshelper.generate_GPX(total_points, trk_name="gopro-track-%s" % args.outputfile)
     fd = open("%s.gpx" % args.outputfile , "w+")
     fd.write(gpx)
     fd.close()
+
+    print("Total duration: ", total_duration)
    
    # falla el 46 y el 48
